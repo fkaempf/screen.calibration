@@ -11,7 +11,7 @@ SQUARES_HORIZONTALLY = 5
 SQUARE_LENGTH = 0.03
 MARKER_LENGTH = 0.015
 # ...
-PATH_TO_YOUR_IMAGES = Path(os.getcwd()).joinpath('pixel7_calibration')
+PATH_TO_YOUR_IMAGES = Path(os.getcwd()).joinpath('GSR-3U3-4IC-6NIR-C')
 
 def detect_pose(image, camera_matrix, dist_coeffs):
 
@@ -48,7 +48,7 @@ def main():
     dist_coeffs = np.load('dist_coeffs.npy')
 
     # Iterate through PNG images in the folder
-    image_files = [os.path.join(PATH_TO_YOUR_IMAGES, f) for f in os.listdir(PATH_TO_YOUR_IMAGES) if f.endswith(".jpg")]
+    image_files = [os.path.join(PATH_TO_YOUR_IMAGES, f) for f in os.listdir(PATH_TO_YOUR_IMAGES) if f.endswith(".jpg") or f.endswith(".png")]
     image_files.sort()  # Ensure files are in order
 
     for image_file in image_files:
