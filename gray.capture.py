@@ -2,16 +2,13 @@ import os, sys, time, gc
 import numpy as np
 import cv2
 import pygame
-import matplotlib.pyplot as plt  # only if you want to visualize in debug
+import matplotlib.pyplot as plt
 
 # ================== user settings ==================
 W, H = 800, 600            # fallback size; will be replaced by projector monitor size
-USE_PYSPIN = True          # True uses FLIR Spinnaker (PySpin), False uses OpenCV VideoCapture
-CAM_INDEX = 0              # used only when USE_PYSPIN is False
 EXPOSURE_MS = 10           # camera exposure in ms
 GAIN_DB = 0.0
 NUM_DUMMY_FRAMES = 5
-
 PROJ_MONITOR_MODE = "rightmost"  # "rightmost" or "index"
 PROJ_MONITOR_INDEX = 1           # only used if PROJ_MONITOR_MODE == "index"
 # ===================================================
@@ -140,7 +137,7 @@ class CamPySpin(CamBase):
             except Exception:
                 break
 
-    def trigger_and_grab(self, timeout_ms=2000):
+    def trigger_and_grab(self, timeout_ms=100):
         PS = self.PySpin
         trig = PS.CCommandPtr(self.cam.GetNodeMap().GetNode("TriggerSoftware"))
         trig.Execute()
@@ -232,7 +229,7 @@ def capture_graycode():
     except Exception:
         pass
 
-    cam = CamPySpin(EXPOSURE_MS, GAIN_DB) if USE_PYSPIN else CamCV(CAM_INDEX, EXPOSURE_MS, GAIN_DB)
+    cam = CamPySpin(EXPOSURE_MS, GAIN_DB)
 
     captured = []
     black_cap = None
@@ -246,7 +243,7 @@ def capture_graycode():
         for pat_img in patterns:
             p8 = pat_img if pat_img.dtype == np.uint8 else cv2.convertScaleAbs(pat_img)
             projector_show(p8)
-            time.sleep(0.1)  # about two refreshes at 60 Hz
+            time.sleep(0.1)
             frame = cam.grab()
             if frame.dtype != np.uint8:
                 frame = cv2.convertScaleAbs(frame)
@@ -267,7 +264,6 @@ def capture_graycode():
             pass
         gc.collect()
 
-    # ensure patterns are uint8 for easy viewing and saving
     patterns_u8 = [p if p.dtype == np.uint8 else cv2.convertScaleAbs(p) for p in patterns]
     return patterns_u8, captured, black_cap, white_cap
 
@@ -275,19 +271,12 @@ def capture_graycode():
 if __name__ == "__main__":
     try:
         patterns, captured, black_cap, white_cap = capture_graycode()
-        print("Captured", len(captured), "frames at size", captured[0].shape if captured else None)
-        # If you want to decode here, prefer per-pixel getProjPixel. Example:
-        # pat = cv2.structured_light_GrayCodePattern.create(W, H)
-        # ok, _ = pat.generate()
-        # cam_h, cam_w = captured[0].shape
-        # proj_x = np.full((cam_h, cam_w), -1, np.int32)
-        # proj_y = np.full((cam_h, cam_w), -1, np.int32)
-        # for y in range(cam_h):
-        #     for x in range(cam_w):
-        #         ok, projPix = pat.getProjPixel(captured, x, y)
-        #         if ok:
-        #             proj_x[y, x] = int(projPix.x)
-        #             proj_y[y, x] = int(projPix.y)
+        pat = cv2.structured_light_GrayCodePattern.create(W, H)
+        ok, proj_xy = pat.decode(captured, black_cap, white_cap)
+        if not ok:
+            raise RuntimeError("GrayCode decode failed")
+        proj_x, proj_y = proj_xy
+        print("Decoded maps shape:", proj_x.shape, proj_y.shape)
     except Exception as e:
         print("Error:", e)
         sys.exit(1)
