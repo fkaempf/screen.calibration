@@ -26,7 +26,7 @@ SQUARES_HORIZONTALLY = 5
 SQUARE_LENGTH = 0.03
 MARKER_LENGTH = 0.015
 # ...
-PATH_TO_YOUR_IMAGES = Path(os.getcwd()).joinpath('pixel7_calibration')
+PATH_TO_YOUR_IMAGES = Path(os.getcwd()).joinpath('GSR-3U3-4IC-6NIR-C')
 # ------------------------------
 
 def calibrate_and_save_parameters():
@@ -36,7 +36,7 @@ def calibrate_and_save_parameters():
     params = cv2.aruco.DetectorParameters()
 
     # Load PNG images from folder
-    image_files = [os.path.join(PATH_TO_YOUR_IMAGES, f) for f in os.listdir(PATH_TO_YOUR_IMAGES) if f.endswith(".jpg")]
+    image_files = [os.path.join(PATH_TO_YOUR_IMAGES, f) for f in os.listdir(PATH_TO_YOUR_IMAGES) if f.endswith(".jpg") or f.endswith(".png")]
     image_files.sort()  # Ensure files are in order
 
     all_charuco_corners = []
@@ -61,7 +61,7 @@ def calibrate_and_save_parameters():
     imgpoints = [corners.reshape(-1,1,2).astype(np.float32) for corners in all_charuco_corners]
 
     retval, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.aruco.calibrateCameraCharuco(all_charuco_corners, all_charuco_ids, board, image.shape[:2], None, None)
-    rms, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.fisheye.calibrate(objpoints, imgpoints, image.shape[1::-1], np.eye(3), np.zeros((4,1)), None, None, cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC|cv2.fisheye.CALIB_CHECK_COND|cv2.fisheye.CALIB_FIX_SKEW, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-6))
+    #rms, camera_matrix, dist_coeffs, rvecs, tvecs = cv2.fisheye.calibrate(objpoints, imgpoints, image.shape[1::-1], np.eye(3), np.zeros((4,1)), None, None, cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC|cv2.fisheye.CALIB_CHECK_COND|cv2.fisheye.CALIB_FIX_SKEW, (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 1e-6))
 
 
     # Save calibration data
@@ -72,7 +72,7 @@ def calibrate_and_save_parameters():
     for image_file in image_files:
         image = cv2.imread(image_file)
         undistorted_image = cv2.undistort(image, camera_matrix, dist_coeffs)
-        map1,map2=cv2.fisheye.initUndistortRectifyMap(camera_matrix,dist_coeffs,np.eye(3),camera_matrix,(image.shape[1],image.shape[0]),cv2.CV_16SC2); undistorted_image=cv2.remap(image,map1,map2,cv2.INTER_LINEAR)
+        #map1,map2=cv2.fisheye.initUndistortRectifyMap(camera_matrix,dist_coeffs,np.eye(3),camera_matrix,(image.shape[1],image.shape[0]),cv2.CV_16SC2); undistorted_image=cv2.remap(image,map1,map2,cv2.INTER_LINEAR)
 
         cv2.imshow('Undistorted Image', undistorted_image)
         cv2.waitKey(0)
