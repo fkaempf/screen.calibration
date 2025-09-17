@@ -65,8 +65,8 @@ def calibrate_and_save_parameters():
 
 
     # Save calibration data
-    np.save('camera_matrix.npy', camera_matrix)
-    np.save('dist_coeffs.npy', dist_coeffs)
+    np.save('K_cam.npy', camera_matrix)
+    np.save('D_cam.npy', dist_coeffs)
 
     # Iterate through displaying all the images
     for image_file in image_files:
