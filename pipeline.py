@@ -3,12 +3,20 @@ import os, time
 import numpy as np
 import cv2
 import pygame
-
-from gray_capture_rotpy import capture_and_decode, CamRotPy
+from CamAlvium import CamAlvium
+from gray_capture_rotpy import capture_and_decode_sine_hybrid, capture_and_decode, CamRotPy
 from warp_stimulus import build_proj_to_cam_map, make_camera_grid, make_uv_map
 
-PROJ_W = 800
-PROJ_H = 600
+
+CAMTYPE = "rotpy"        # "rotpy" or "alvium"
+MODE = "sine_hybrid"           # "gray" or "sine_hybrid"
+PERIODS_X = 64          # ~12.5px period for 800px width
+PERIODS_Y = 48          # ~12.5px period for 600px height
+NPHASE    = 4
+AVG_PER   = 1           # you can increase to 3–5 if needed
+GAMMA_INV = None        # set 2.2 if you want inverse-gamma on the projected sines
+PROJ_W = 1280
+PROJ_H = 800
 
 try:
     from screeninfo import get_monitors
@@ -36,7 +44,7 @@ def _frame_to_surface(img_u8, size_wh):
         rgb = cv2.resize(rgb, (W, H), interpolation=cv2.INTER_LINEAR)
     return pygame.surfarray.make_surface(rgb.swapaxes(0, 1))
 
-def project_and_capture_single(img_u8, save_path, exposure_ms=10.0, gain_db=0.0, hold_seconds=3.0, settle_seconds=0.2):
+def project_and_capture_single(img_u8, save_path, exposure_ms=10.0, gain_db=0.0, hold_seconds=3.0, settle_seconds=0.2,camtype = "rotpy"):
     m = _pick_monitor_rightmost()
     os.environ.setdefault("SDL_VIDEODRIVER", "windows")
     os.environ.setdefault("SDL_RENDER_DRIVER", "software")
@@ -49,9 +57,13 @@ def project_and_capture_single(img_u8, save_path, exposure_ms=10.0, gain_db=0.0,
     pygame.display.set_caption("Projector")
     surf = _frame_to_surface(img_u8, (m.width, m.height))
     screen.blit(surf, (0, 0)); pygame.display.flip()
-
-    cam = CamRotPy(exposure_ms=exposure_ms, gain_db=gain_db)
-    cam.start()
+    if camtype.lower() == "alvium":
+        
+        cam = CamAlvium(exposure_ms=exposure_ms, gain_db=gain_db)
+        cam.start()
+    elif camtype.lower() == "rotpy":
+        cam = CamRotPy(exposure_ms=exposure_ms, gain_db=gain_db)
+        cam.start()
     time.sleep(settle_seconds)
     frame = cam.grab()
     cam.stop()
@@ -98,6 +110,45 @@ def make_equirect_checker(h=1024, w=2048, step_deg=30, line_px=2):
     cv2.line(img, (0, h // 2), (w - 1, h // 2), (0, 0, 255), line_px + 1)
     return img
 
+def despeckle_maps(mapx, mapy, valid_mask=None, k_med=3, k_avg=5, tol=2.0):
+    """
+    Remove tiny speckles in mapx/mapy (projector space).
+    If valid_mask shape doesn't match mapx/mapy, it is ignored.
+    """
+    mx = mapx.astype(np.float32, copy=True)
+    my = mapy.astype(np.float32, copy=True)
+
+    # choose a projector-space validity mask
+    if valid_mask is not None and valid_mask.shape == mx.shape:
+        vm = valid_mask.astype(bool)
+    else:
+        vm = (mx >= 0) & (my >= 0)   # measured locations only
+
+    # 1) median proposal
+    mx_med = cv2.medianBlur(mx, k_med)
+    my_med = cv2.medianBlur(my, k_med)
+
+    # 2) outliers vs. local median (only where we had measurements)
+    out_x = (np.abs(mx - mx_med) > tol) & vm
+    out_y = (np.abs(my - my_med) > tol) & vm
+
+    # 3) replace outliers with median
+    mx[out_x] = mx_med[out_x]
+    my[out_y] = my_med[out_y]
+
+    # 4) gentle local average over measured neighbors
+    vm_f = vm.astype(np.float32)
+    ksize = (k_avg, k_avg)
+    sum_w = cv2.boxFilter(vm_f, -1, ksize, normalize=False)
+    sum_x = cv2.boxFilter(mx * vm_f, -1, ksize, normalize=False)
+    sum_y = cv2.boxFilter(my * vm_f, -1, ksize, normalize=False)
+
+    good = sum_w > 0
+    mx[good] = sum_x[good] / sum_w[good]
+    my[good] = sum_y[good] / sum_w[good]
+
+    return mx, my
+
 if __name__ == "__main__":
     ts = time.strftime("%Y%m%d_%H%M%S")
     OUT = os.path.join("out", ts)
@@ -105,11 +156,24 @@ if __name__ == "__main__":
     print("Saving to", OUT)
 
     # 1) capture and decode
-    proj_x, proj_y, black_cap, white_cap, valid = capture_and_decode(
+    if MODE == "sine_hybrid":
+        proj_x_f, proj_y_f, black_cap, white_cap, valid = capture_and_decode_sine_hybrid(
         proj_w=PROJ_W, proj_h=PROJ_H,
-        exposure_ms=7, gain_db=0.0,wait_s=0.1,
-        proj_monitor_mode="index", proj_monitor_index=1,avg_per_pattern=100, avg_mode="mean"
+        exposure_ms=7, gain_db=0.0,
+        proj_monitor_mode="index", proj_monitor_index=1,
+        periods_x=PERIODS_X, periods_y=PERIODS_Y, nphase=NPHASE,
+        wait_s=None, avg_per=AVG_PER, gamma=GAMMA_INV,
+        mod_thresh=0.2,camtype=CAMTYPE
     )
+        # your build_proj_to_cam_map uses integer coords; round safely
+        proj_x = np.where(valid, np.rint(proj_x_f).astype(np.int32), -1)
+        proj_y = np.where(valid, np.rint(proj_y_f).astype(np.int32), -1)
+    else:
+        proj_x, proj_y, black_cap, white_cap, valid = capture_and_decode(
+            proj_w=PROJ_W, proj_h=PROJ_H,
+            exposure_ms=7, gain_db=0.0,
+            proj_monitor_mode="index", proj_monitor_index=1
+        )
 
     # save valid mask and camera side heat maps
     cam_h, cam_w = proj_x.shape
@@ -124,6 +188,11 @@ if __name__ == "__main__":
         mx = cv2.inpaint(mapx, (mask*255).astype(np.uint8), 5, cv2.INPAINT_NS)
         my = cv2.inpaint(mapy, (mask*255).astype(np.uint8), 5, cv2.INPAINT_NS)
         mapx, mapy = mx, my
+        
+    mapx, mapy = despeckle_maps(mapx, mapy, valid_mask=valid, k_med=3, k_avg=5, tol=2.0)
+        
+    # (optional) tiny final median to knock single-pixel residue
+    mapx = cv2.medianBlur(mapx, 3); mapy = cv2.medianBlur(mapy, 3)
 
     # save projector side heat maps
     save_heat(os.path.join(OUT, "mapx_heat.png"), mapx, cam_w - 1)
@@ -182,3 +251,6 @@ if __name__ == "__main__":
         )
     else:
         print("K_cam.npy or D_cam.npy not found, uv_map step skipped")
+        
+    np.save('mapx.npy',mapx)
+    np.save('mapy.npy',mapy)

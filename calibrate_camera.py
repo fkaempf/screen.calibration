@@ -3,6 +3,8 @@ import numpy as np
 import cv2
 from pathlib import Path
 
+from detect_pose import detect_pose
+
 # ------------------------------
 # Read existing ChArUco
 img = cv2.imread("ChArUco_Marker.png")   # Replace with your path
@@ -73,9 +75,22 @@ def calibrate_and_save_parameters():
         image = cv2.imread(image_file)
         undistorted_image = cv2.undistort(image, camera_matrix, dist_coeffs)
         #map1,map2=cv2.fisheye.initUndistortRectifyMap(camera_matrix,dist_coeffs,np.eye(3),camera_matrix,(image.shape[1],image.shape[0]),cv2.CV_16SC2); undistorted_image=cv2.remap(image,map1,map2,cv2.INTER_LINEAR)
+        small = cv2.resize(image, None, fx=0.3, fy=0.3)
+        cv2.imshow('Original Image', small)
+        small = cv2.resize(undistorted_image, None, fx=0.3, fy=0.3)
+        cv2.imshow('Undistorted Image', small)
+        
+        
+        pose_image = detect_pose(image, camera_matrix, dist_coeffs)
 
-        cv2.imshow('Undistorted Image', undistorted_image)
+        # Show the image
+        
+        small = cv2.resize(pose_image, None, fx=0.3, fy=0.3)
+        cv2.imshow('Pose Image', small)
         cv2.waitKey(0)
+        
+        
+
 
     cv2.destroyAllWindows()
 

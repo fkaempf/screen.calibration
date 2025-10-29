@@ -49,70 +49,15 @@ def projector_show(surface, img_u8):
     pygame.surfarray.blit_array(surface, rgb.swapaxes(0, 1))
     pygame.display.flip()
 
+
+# ---------------- Alvium camera backend ----------------
+
+from CamAlvium import CamAlvium
+           
 # ---------------- RotPy camera backend ----------------
-class CamRotPy:
-    def __init__(self, exposure_ms=10.0, gain_db=0.0):
-        from rotpy.system import SpinSystem
-        from rotpy.camera import CameraList
-        self.system = SpinSystem()
-        cam_list = CameraList.create_from_system(self.system, True, True)
-        if cam_list.get_size() < 1:
-            raise RuntimeError("No FLIR camera found")
-        self.cam = cam_list.create_camera_by_index(0)
-        self.exposure_ms = exposure_ms
-        self.gain_db = gain_db
 
-    def start(self):
-        c = self.cam
-        c.init_cam()
-        try: c.camera_nodes.PixelFormat.set_node_value_from_str("Mono8")
-        except: pass
-        try: c.camera_nodes.ExposureAuto.set_node_value_from_str("Off")
-        except: pass
-        try: c.camera_nodes.ExposureTime.set_node_value(max(500.0, min(self.exposure_ms*1000.0, 3e7)))
-        except: pass
-        try: c.camera_nodes.GainAuto.set_node_value_from_str("Off")
-        except: pass
-        try: c.camera_nodes.Gain.set_node_value(self.gain_db)
-        except: pass
-        # force software trigger
-        try:
-            c.camera_nodes.TriggerMode.set_node_value_from_str("Off")
-            c.camera_nodes.TriggerSelector.set_node_value_from_str("FrameStart")
-            c.camera_nodes.TriggerSource.set_node_value_from_str("Software")
-            c.camera_nodes.TriggerMode.set_node_value_from_str("On")
-        except: pass
-        c.begin_acquisition()
-        for _ in range(3):
-            try:
-                im = c.get_next_image(timeout=0.2)
-                im.release()
-            except:
-                break
 
-    def grab(self, timeout_s=1.0):
-        c = self.cam
-        try: c.camera_nodes.TriggerSoftware.execute_node()
-        except: pass
-        im = c.get_next_image(timeout=timeout_s)
-        try:
-            try: im = im.convert_fmt("Mono8")
-            except: pass
-            h, w, stride = im.get_height(), im.get_width(), im.get_stride()
-            try: b = im.get_image_data_bytes()
-            except: b = bytes(im.get_image_data_memoryview())
-            a = np.frombuffer(b, np.uint8)[:h*stride].reshape(h, stride)[:, :w]
-            return np.ascontiguousarray(a)
-        finally:
-            im.release()
-
-    def stop(self):
-        try: self.cam.end_acquisition()
-        except: pass
-        try: self.cam.deinit_cam()
-        except: pass
-        try: self.cam.release()
-        except: pass
+from CamRotPy import CamRotPy
 
 # ---------------- Gray code generator and minimal decode ----------------
 def generate_graycode_patterns(w, h):
@@ -198,7 +143,8 @@ def capture_and_decode(proj_w, proj_h,
                        exposure_ms=10.0, gain_db=0.0,
                        proj_monitor_mode="index", proj_monitor_index=1,
                        wait_s=None,
-                       avg_per_pattern=3, avg_mode="mean"):
+                       avg_per_pattern=3, avg_mode="mean",
+                       camtype = "rotpy"):
     """
     Timing safe with averaging:
       - show each pattern
@@ -208,8 +154,10 @@ def capture_and_decode(proj_w, proj_h,
     patterns, black, white = generate_graycode_patterns(proj_w, proj_h)
     m = _pick_monitor(proj_monitor_mode, proj_monitor_index, (proj_w, proj_h))
     surf = _setup_window_at_monitor(m)
-
-    cam = CamRotPy(exposure_ms, gain_db)
+    if camtype.lower() == "alvium":
+        cam = CamAlvium(exposure_ms, gain_db)
+    elif camtype.lower() == "rotpy":
+        cam = CamRotPy(exposure_ms, gain_db)
     cam.start()
 
     if wait_s is None:
@@ -238,6 +186,186 @@ def capture_and_decode(proj_w, proj_h,
 
     proj_x, proj_y, valid = decode_gray_minimal(captured, black_cap, white_cap, proj_w, proj_h)
     return proj_x, proj_y, black_cap, white_cap, valid
+
+# ==== SINE / FRINGE PATTERNS (4-step) ========================================
+
+def gen_sine_patterns(W, H, periods, nphase=4, axis='x', gamma=None):
+    """
+    Generate nphase phase-shifted cos fringes along x or y.
+    periods: number of periods across the axis (e.g., 64 for W=800 -> ~12.5px period)
+    gamma: if not None, apply inverse-gamma LUT (e.g., 2.2) to linearize projector
+    """
+    import numpy as np, cv2
+    if axis == 'x':
+        u = np.linspace(0, 2*np.pi*periods, W, endpoint=False)[None, :]
+        u = np.repeat(u, H, axis=0)
+    else:
+        u = np.linspace(0, 2*np.pi*periods, H, endpoint=False)[:, None]
+        u = np.repeat(u, W, axis=1)
+
+    pats = []
+    for k in range(nphase):
+        phi = 2*np.pi * (k / nphase)   # 0, pi/2, pi, 3pi/2
+        img = 0.5 + 0.5*np.cos(u + phi)             # [0..1]
+        u8  = (img * 255.0 + 0.5).astype(np.uint8)
+        if gamma is not None:
+            # inverse gamma so the *camera* sees closer to linear sinusoid
+            x = np.arange(256, dtype=np.float32)/255.0
+            lut = np.clip((x ** (1.0/gamma))*255.0 + 0.5, 0, 255).astype(np.uint8)
+            u8 = cv2.LUT(u8, lut)
+        pats.append(u8)
+    return pats
+
+def decode_phase_4step(frames4):
+    """
+    frames4: list/tuple of 4 equal-sized uint8/float images: [I0, I90, I180, I270]
+    returns: phase in [-pi,pi), modulation in [0..1]
+    """
+    import numpy as np
+    I0, I90, I180, I270 = [f.astype(np.float32) for f in frames4]
+    num = (I270 - I90)
+    den = (I0   - I180)
+    phase = np.arctan2(num, den)    # [-pi,pi)
+    A = 0.5*np.sqrt(num*num + den*den)
+    Iavg = 0.25*(I0 + I90 + I180 + I270)
+    mod = np.clip(A / (Iavg + 1e-6), 0, 1)
+    return phase, mod
+
+def _show_and_grab_sequence(surface, cam, patterns, wait_s, avg_per=1, sleep_after=0.0,camtype = "rotpy"):
+    """
+    Projects each pattern and grabs one (or averaged) frame for each.
+    """
+    import time, numpy as np, cv2, pygame
+    captured = []
+    for pat in patterns:
+        # show
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT: raise KeyboardInterrupt
+        if pat.dtype != np.uint8: pat = cv2.convertScaleAbs(pat)
+        rgb = np.dstack([pat]*3)
+        pygame.surfarray.blit_array(surface, rgb.swapaxes(0,1)); pygame.display.flip()
+
+        time.sleep(wait_s)
+        if avg_per <= 1:
+            frm = cam.grab()
+        else:
+            stack = [cam.grab() for _ in range(avg_per)]
+            frm = np.median(np.stack(stack,0),0).astype(np.uint8)
+        if frm.dtype != np.uint8:
+            frm = cv2.convertScaleAbs(frm)
+        captured.append(np.ascontiguousarray(frm))
+        if sleep_after > 0:
+            time.sleep(sleep_after)
+    return captured
+
+def capture_sine_sets(proj_w, proj_h,
+                      exposure_ms=10.0, gain_db=0.0,
+                      proj_monitor_mode="index", proj_monitor_index=1,
+                      periods_x=64, periods_y=48, nphase=4,
+                      wait_s=None, avg_per=1, gamma=None,camtype = "rotpy"):
+    """
+    Projects 4-step sine sets for X and Y, captures frames, and returns:
+      (frames_x[4], frames_y[4], black_cap, white_cap)
+    """
+    import pygame, time, numpy as np, cv2
+    # pick monitor and window
+    m = _pick_monitor(proj_monitor_mode, proj_monitor_index, (proj_w, proj_h))
+    surface = _setup_window_at_monitor(m)
+
+    # camera
+    if camtype.lower() == "alvium":
+        cam = CamAlvium(exposure_ms, gain_db); cam.start()
+    elif camtype.lower() == "rotpy":
+        cam = CamRotPy(exposure_ms, gain_db); cam.start()
+
+    if wait_s is None:
+        wait_s = max(exposure_ms/1000.0 + 0.02, 0.06)
+
+    # patterns
+    patt_x = gen_sine_patterns(proj_w, proj_h, periods_x, nphase=nphase, axis='x', gamma=gamma)
+    patt_y = gen_sine_patterns(proj_w, proj_h, periods_y, nphase=nphase, axis='y', gamma=gamma)
+    black = np.zeros((proj_h, proj_w), np.uint8)
+    white = np.full((proj_h, proj_w), 255, np.uint8)
+
+    try:
+        # settle on black
+        surface.fill((0,0,0)); pygame.display.flip(); time.sleep(0.2)
+
+        frames_x = _show_and_grab_sequence(surface, cam, patt_x, wait_s, avg_per=avg_per)
+        frames_y = _show_and_grab_sequence(surface, cam, patt_y, wait_s, avg_per=avg_per)
+
+        # capture black/white for validity
+        # black
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT: raise KeyboardInterrupt
+        pygame.surfarray.blit_array(surface, np.dstack([black]*3).swapaxes(0,1)); pygame.display.flip()
+        time.sleep(wait_s); black_cap = cam.grab()
+        # white
+        for e in pygame.event.get():
+            if e.type == pygame.QUIT: raise KeyboardInterrupt
+        pygame.surfarray.blit_array(surface, np.dstack([white]*3).swapaxes(0,1)); pygame.display.flip()
+        time.sleep(wait_s); white_cap = cam.grab()
+
+    finally:
+        cam.stop(); pygame.display.quit(); pygame.quit()
+
+    if black_cap.dtype != np.uint8: black_cap = cv2.convertScaleAbs(black_cap)
+    if white_cap.dtype != np.uint8: white_cap = cv2.convertScaleAbs(white_cap)
+    return frames_x, frames_y, black_cap, white_cap
+
+def unwrap_with_gray(phase_wrapped, coarse_int):
+    """
+    Simple hybrid: use coarse Gray integer as pixel index; phase gives subpixel offset.
+    Returns float coordinates: coarse + (phase/2pi - 0.5).
+    """
+    frac = (phase_wrapped + np.pi) / (2*np.pi)   # [-pi,pi) -> [0,1)
+    return coarse_int.astype(np.float32) + (frac - 0.5)
+
+def capture_and_decode_sine_hybrid(proj_w, proj_h,
+                                   exposure_ms=10.0, gain_db=0.0,
+                                   proj_monitor_mode="index", proj_monitor_index=1,
+                                   periods_x=64, periods_y=48, nphase=4,
+                                   wait_s=None, avg_per=1, gamma=None,
+                                   gray_minimal=True, mod_thresh=0.2,camtype = "rotpy"):
+    """
+    Full hybrid:
+      1) run your existing GRAY decode to get coarse proj_x, proj_y (ints)
+      2) capture 4-step sine X and Y; decode wrapped phases + modulation
+      3) combine to get float projector coords with subpixel precision
+    Returns: proj_x_float, proj_y_float, black_cap, white_cap, valid_mask
+    """
+    # 1) gray
+    px_i, py_i, black_cap, white_cap, valid_gray = capture_and_decode(
+        proj_w, proj_h, exposure_ms, gain_db,
+        proj_monitor_mode, proj_monitor_index, wait_s
+    )
+
+    # 2) sine sets
+    frames_x, frames_y, black_cap2, white_cap2 = capture_sine_sets(
+        proj_w, proj_h, exposure_ms, gain_db,
+        proj_monitor_mode, proj_monitor_index,
+        periods_x, periods_y, nphase, wait_s, avg_per, gamma,camtype=camtype
+    )
+    # prefer the later black/white (same pose)
+    black_cap = black_cap2; white_cap = white_cap2
+
+    # decode 4-step phases
+    phase_x, mod_x = decode_phase_4step(frames_x)
+    phase_y, mod_y = decode_phase_4step(frames_y)
+
+    # 3) hybrid unwrap
+    px_f = unwrap_with_gray(phase_x, px_i)
+    py_f = unwrap_with_gray(phase_y, py_i)
+
+    # validity: gray valid + not saturated + modulation ok
+    B = black_cap.astype(np.int16); W = white_cap.astype(np.int16)
+    valid = (W - B) > 10
+    valid = valid & valid_gray.astype(bool) & (mod_x > mod_thresh) & (mod_y > mod_thresh)
+
+    # clamp out of range to -1
+    px_f[~valid] = -1
+    py_f[~valid] = -1
+    return px_f.astype(np.float32), py_f.astype(np.float32), black_cap, white_cap, valid.astype(np.uint8)
 
 if __name__ == "__main__":
     px, py, b, w, val = capture_and_decode(800, 600, exposure_ms=16.7, avg_per_pattern=3, avg_mode="median")

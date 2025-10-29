@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 from pathlib import Path
 
+
 # ------------------------------
 # ENTER YOUR REQUIREMENTS HERE:
 ARUCO_DICT = cv2.aruco.DICT_6X6_250
@@ -44,8 +45,8 @@ def detect_pose(image, camera_matrix, dist_coeffs):
 
 def main():
     # Load calibration data
-    camera_matrix = np.load('camera_matrix.npy')
-    dist_coeffs = np.load('dist_coeffs.npy')
+    camera_matrix = np.load('K_cam.npy')
+    dist_coeffs = np.load('D_cam.npy')
 
     # Iterate through PNG images in the folder
     image_files = [os.path.join(PATH_TO_YOUR_IMAGES, f) for f in os.listdir(PATH_TO_YOUR_IMAGES) if f.endswith(".jpg") or f.endswith(".png")]
@@ -59,7 +60,10 @@ def main():
         pose_image = detect_pose(image, camera_matrix, dist_coeffs)
 
         # Show the image
-        cv2.imshow('Pose Image', pose_image)
+        
+        small = cv2.resize(pose_image, None, fx=0.3, fy=0.3)
+        cv2.imshow('Pose Image', small)
         cv2.waitKey(0)
 
-main()
+if __name__ == "__main__":
+    main()
