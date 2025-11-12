@@ -8,12 +8,12 @@ from gray_capture_rotpy import capture_and_decode_sine_hybrid, capture_and_decod
 from warp_stimulus import build_proj_to_cam_map, make_camera_grid, make_uv_map
 
 
-CAMTYPE = "rotpy"        # "rotpy" or "alvium"
+CAMTYPE = "alvium"        # "rotpy" or "alvium"
 MODE = "sine_hybrid"           # "gray" or "sine_hybrid"
-PERIODS_X = 64          # ~12.5px period for 800px width
-PERIODS_Y = 48          # ~12.5px period for 600px height
-NPHASE    = 4
-AVG_PER   = 1           # you can increase to 3–5 if needed
+PERIODS_X = 128          # ~12.5px period for 800px width
+PERIODS_Y = 96          # ~12.5px period for 600px height
+NPHASE    = 15
+AVG_PER   = 5           # you can increase to 3–5 if needed
 GAMMA_INV = None        # set 2.2 if you want inverse-gamma on the projected sines
 PROJ_W = 1280
 PROJ_H = 800
@@ -159,7 +159,7 @@ if __name__ == "__main__":
     if MODE == "sine_hybrid":
         proj_x_f, proj_y_f, black_cap, white_cap, valid = capture_and_decode_sine_hybrid(
         proj_w=PROJ_W, proj_h=PROJ_H,
-        exposure_ms=7, gain_db=0.0,
+        exposure_ms=2, gain_db=0.0,
         proj_monitor_mode="index", proj_monitor_index=1,
         periods_x=PERIODS_X, periods_y=PERIODS_Y, nphase=NPHASE,
         wait_s=None, avg_per=AVG_PER, gamma=GAMMA_INV,
@@ -208,10 +208,11 @@ if __name__ == "__main__":
     project_and_capture_single(
         proj_grid,
         save_path=os.path.join(OUT, "camera_view_of_warp.png"),
-        exposure_ms=10.0,
+        exposure_ms=3,
         gain_db=0.0,
         hold_seconds=3.0,
-        settle_seconds=0.2
+        settle_seconds=0.2,
+        camtype=CAMTYPE
     )
 
     # 5) save the LUTs
@@ -219,13 +220,28 @@ if __name__ == "__main__":
     np.save(os.path.join(OUT, "mapy.npy"), mapy)
 
     # 6) uv_map: compute, save, visualize, render a VR checker, project, capture
-    K_path, D_path = "K_cam.npy", "D_cam.npy"
+    if CAMTYPE.lower() == "rotpy":
+        K_path, D_path = "K_cam.npy", "D_cam.npy"
+    elif CAMTYPE.lower() == "alvium":
+        K_path, D_path, xi_path = "fisheye_config/K.npy", "fisheye_config/D.npy","fisheye_config/xi.npy"
+        if not (os.path.exists(K_path) and os.path.exists(D_path) and os.path.exists(xi_path)):
+            raise FileNotFoundError("omnidir intrinsics missing: K/D/xi")
+        
     if os.path.exists(K_path) and os.path.exists(D_path):
-        K = np.load(K_path).astype(np.float64)
-        D = np.load(D_path).astype(np.float64)
-        MODEL = "pinhole"  # set to "fisheye" if you calibrated with cv2.fisheye
+        if CAMTYPE.lower() == "rotpy":
+            K = np.load(K_path).astype(np.float64)
+            D = np.load(D_path).astype(np.float64)
+            MODEL = "pinhole"
+            uv = make_uv_map(mapx, mapy, K, D, model=MODEL)
+        elif CAMTYPE.lower() == "alvium":
+            K = np.load(K_path).astype(np.float64)
+            D = np.load(D_path).astype(np.float64)
+            xi = np.load(xi_path).astype(np.float64)
+            MODEL = "fisheye_xi"
+            uv = make_uv_map(mapx, mapy, K, D, model=MODEL, xi=xi, w=cam_w, h=cam_h)
+        
 
-        uv = make_uv_map(mapx, mapy, K, D, model=MODEL)
+        
         np.save(os.path.join(OUT, "uv_map.npy"), uv)
 
         # UV heat maps
@@ -244,10 +260,11 @@ if __name__ == "__main__":
         project_and_capture_single(
             proj_vr,
             save_path=os.path.join(OUT, "camera_view_of_vr_checker.png"),
-            exposure_ms=10.0,
+            exposure_ms=2,
             gain_db=0.0,
             hold_seconds=3.0,
-            settle_seconds=0.2
+            settle_seconds=0.2,
+            camtype=CAMTYPE
         )
     else:
         print("K_cam.npy or D_cam.npy not found, uv_map step skipped")
