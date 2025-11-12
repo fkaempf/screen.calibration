@@ -96,30 +96,79 @@ def make_camera_grid(h, w, step=40, thick=1):
     cv2.drawMarker(img, (w//2, h//2), 0, cv2.MARKER_CROSS, step, max(1, thick))
     return img
 
-def make_uv_map(mapx, mapy, K, D, model="pinhole"):
-    """
-    Minimal UV map: undistort to normalized rays, convert to equirect UV.
-    No flips or adjustments.
-    """
-    proj_h, proj_w = mapx.shape
-    pts = np.stack([mapx.ravel(), mapy.ravel()], axis=1).astype(np.float32).reshape(-1, 1, 2)
+import numpy as np
+import cv2
 
-    if model == "fisheye":
-        norm = cv2.fisheye.undistortPoints(pts, K, D)
+def make_uv_map(mapx, mapy, K, D, xi=None, w=None, h=None, zoom=0.3, model="pinhole", use_identity_P=True):
+    """
+    Build equirectangular UV map from pixel grid (mapx,mapy).
+    Returns (H,W,2) float32 in [0,1].
+
+    model:
+      "pinhole"     -> cv2.undistortPoints
+      "fisheye_xi"  -> cv2.omnidir.undistortPoints (Mei unified)
+
+    use_identity_P (omnidir only):
+      True  -> P = I, get normalized rays directly (recommended)
+      False -> P = Knew (zoomed perspective); then back-project via Knew^{-1}.
+    """
+    # shapes
+    H, W = mapx.shape
+    pts = np.stack([mapx.ravel(), mapy.ravel()], axis=1).astype(np.float64).reshape(-1, 1, 2)
+
+    # intrinsics to float64 with exact shapes
+    K  = np.asarray(K,  np.float64).reshape(3, 3)
+    D  = np.asarray(D,  np.float64).reshape(1, 4)
+
+    if model == "fisheye_xi":
+        assert xi is not None, "xi required for fisheye_xi"
+        xi = np.asarray(xi, np.float64).reshape(1,)  # (1,)
+        R  = np.eye(3, dtype=np.float64)
+
+        if use_identity_P:
+            # P = I -> output already normalized rays (x,y) on perspective plane
+            P = np.eye(3, dtype=np.float64)
+            norm = cv2.omnidir.undistortPoints(
+                        distorted=pts,   # (N,1,2) array of distorted pixel coordinates
+                        K=K,              # (3,3) camera intrinsic matrix
+                        D=D,              # (1,4) distortion coefficients (k1, k2, p1, p2)
+                        xi=xi,            # (1,) Mei model parameter
+                        R=R               # (3,3) rectification rotation, often np.eye(3)
+                    )
+            x = norm[:, 0, 0]
+            y = norm[:, 0, 1]
+        else:
+            # P = Knew -> output in pixels of Knew; back-project to normalized
+            assert (w is not None) and (h is not None), "w,h required when use_identity_P=False"
+            Knew = K.copy()
+            Knew[0,0] *= float(zoom)
+            Knew[1,1] *= float(zoom)
+            Knew[0,2]  = float(w) / 2.0
+            Knew[1,2]  = float(h) / 2.0
+
+            norm = cv2.omnidir.undistortPoints(pts, K, D, xi, R, Knew, 1)  # pixels in Knew
+            u = norm[:, 0, 0]
+            v = norm[:, 0, 1]
+            fx, fy = Knew[0,0], Knew[1,1]
+            cx, cy = Knew[0,2], Knew[1,2]
+            x = (u - cx) / fx
+            y = (v - cy) / fy
+
     else:
-        norm = cv2.undistortPoints(pts, K, D)
+        # pinhole/plumb-bob path -> normalized directly
+        norm = cv2.undistortPoints(pts, K, D)  # (N,1,2) normalized
+        x = norm[:, 0, 0]
+        y = norm[:, 0, 1]
 
-    x = norm[:, 0, 0]
-    y = norm[:, 0, 1]
+    # build unit direction vectors and map to equirectangular UV
     z = np.ones_like(x)
-
     v = np.stack([x, y, z], axis=1)
     v /= np.linalg.norm(v, axis=1, keepdims=True)
 
-    theta = np.arctan2(v[:, 1], v[:, 0])                         # azimuth
-    phi   = np.arctan2(v[:, 2], np.hypot(v[:, 0], v[:, 1]))      # elevation
+    theta = np.arctan2(v[:, 1], v[:, 0])                    # azimuth [-pi,pi]
+    phi   = np.arctan2(v[:, 2], np.hypot(v[:, 0], v[:, 1])) # elevation [-pi/2,pi/2]
 
-    U = (theta + np.pi) / (2*np.pi)
-    V = (phi + 0.5*np.pi) / np.pi
+    U = (theta + np.pi) / (2.0 * np.pi)                     # [0,1]
+    V = (phi   + 0.5 * np.pi) / np.pi                       # [0,1]
 
-    return np.stack([U, V], axis=1).reshape(proj_h, proj_w, 2).astype(np.float32)
+    return np.stack([U, V], axis=1).reshape(H, W, 2).astype(np.float32)
