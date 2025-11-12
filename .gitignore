@@ -4,4 +4,6 @@ out/
 rectified_map_debug/
 reproj_debug/
 rectified_debug/
-checkerboard_samples/
+calibration.pictures/1800 U 501m NIR-07XC0/automatic.chessboard/*png
+misc/gray.patterns.mp4
+debug/

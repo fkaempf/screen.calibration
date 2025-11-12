@@ -3,9 +3,11 @@ import os, time
 import numpy as np
 import cv2
 import pygame
-from screen_calibration.camera.CamAlvium import CamAlvium
-from screen_calibration.capture.gray_capture_rotpy import capture_and_decode_sine_hybrid, capture_and_decode, CamRotPy
-from screen_calibration.projector.warp_stimulus import build_proj_to_cam_map, make_camera_grid, make_uv_map
+import sys
+sys.path.append(r"D:\screen.calibration")
+from cameras.CamAlvium import CamAlvium
+from mapping import capture_and_decode_sine_hybrid, capture_and_decode, CamRotPy
+from stimulus.warp_stimulus import build_proj_to_cam_map, make_camera_grid, make_uv_map
 
 
 CAMTYPE = "alvium"        # "rotpy" or "alvium"
