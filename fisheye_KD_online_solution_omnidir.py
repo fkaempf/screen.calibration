@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import glob
+import os, json, hashlib, numpy as np, cv2
 
 # --- config ---
 IMG_GLOB = 'checkerboard_samples/*.png'
@@ -310,7 +311,7 @@ def build_rectify_map_for_size_alt(w, h, K, D, xi, zoom=0.3):
     Knew[1,2] = h / 2.0
     size = (int(w), int(h))
     # OpenCV 4.12 order: (K, D, xi, R, Knew, size, m1type, flags)
-    map1, map2 = cv2.omnidir.initUndistortRectifyMap(K, D, xi, R_alt, Knew, size, 5, 1)
+    map1, map2 = cv2.omnidir.initUndistortRectifyMap(K, D, xi, np.eye(3, dtype=np.float64), Knew, size, 5, 1)
     return map1, map2
 
 # choose files; reuse your per_file_sorted if present
@@ -351,7 +352,7 @@ make_video_alt("rectified_map_debug")
 
 
 
-import os, json, hashlib, numpy as np, cv2
+
 
 # --- persist raw calibration (already computed as 'best') ---
 os.makedirs("fisheye_config", exist_ok=True)
