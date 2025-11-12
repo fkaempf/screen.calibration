@@ -1,3 +1,7 @@
 out/
 *.npy
 out/
+rectified_map_debug/
+reproj_debug/
+rectified_debug/
+checkerboard_samples/
