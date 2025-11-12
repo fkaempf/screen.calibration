@@ -12,16 +12,16 @@ if img is None:
     print("Error: could not read image")
 else:
     print("Image shape:", img.shape)
-cv2.imshow("Loaded Image", img)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+#cv2.imshow("Loaded Image", img)
+#cv2.waitKey(0)
+#cv2.destroyAllWindows()
 # ------------------------------
 
 # ------------------------------
 # REQUIREMENTS
 ARUCO_DICT = cv2.aruco.DICT_6X6_250
-SQUARES_VERTICALLY = 7
-SQUARES_HORIZONTALLY = 5
+SQUARES_VERTICALLY = 5
+SQUARES_HORIZONTALLY = 7
 SQUARE_LENGTH = 0.03
 MARKER_LENGTH = 0.015
 PATH_TO_YOUR_IMAGES = Path(os.getcwd()).joinpath('1800 U 501m NIR-07XC0')
@@ -56,6 +56,13 @@ def calibrate_and_save_parameters():
 
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         marker_corners, marker_ids, _ = cv2.aruco.detectMarkers(gray, dictionary, parameters=params)
+        img_markers = image.copy()
+        cv2.aruco.drawDetectedMarkers(img_markers, marker_corners, marker_ids)
+        plt.imshow(cv2.cvtColor(img_markers, cv2.COLOR_BGR2RGB))
+        plt.axis('off')
+        plt.show()
+
+        
         if marker_ids is None or len(marker_ids) == 0:
             continue
 
