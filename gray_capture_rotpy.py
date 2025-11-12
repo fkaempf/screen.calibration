@@ -216,20 +216,44 @@ def gen_sine_patterns(W, H, periods, nphase=4, axis='x', gamma=None):
         pats.append(u8)
     return pats
 
-def decode_phase_4step(frames4):
+def decode_phase_nstep(frames):
     """
-    frames4: list/tuple of 4 equal-sized uint8/float images: [I0, I90, I180, I270]
-    returns: phase in [-pi,pi), modulation in [0..1]
+    General N-step phase-shifting decoder (arbitrary number of evenly spaced phase shifts).
+
+    frames : list/tuple of N equal-sized uint8/float32 images
+             each image corresponds to one projected sine with phase offset φ_k = 2π*k/N
+    returns:
+        phase ∈ [-π, π)
+        modulation ∈ [0,1]
     """
     import numpy as np
-    I0, I90, I180, I270 = [f.astype(np.float32) for f in frames4]
-    num = (I270 - I90)
-    den = (I0   - I180)
-    phase = np.arctan2(num, den)    # [-pi,pi)
-    A = 0.5*np.sqrt(num*num + den*den)
-    Iavg = 0.25*(I0 + I90 + I180 + I270)
+
+    # Convert to float32 stack [H, W, N]
+    I = np.stack([f.astype(np.float32) for f in frames], axis=-1)
+    N = I.shape[-1]
+    if N < 3:
+        raise ValueError("Need at least 3 phase-shifted images")
+
+    # Precompute equally spaced phase offsets (in radians)
+    phi = np.linspace(0, 2*np.pi, N, endpoint=False).astype(np.float32)
+
+    # Compute the first-harmonic complex Fourier coefficient
+    # a1 = Σ I_k * exp(-j*φ_k)
+    cos_phi = np.cos(phi)
+    sin_phi = np.sin(phi)
+    a_real = np.tensordot(I, cos_phi, axes=([-1],[0]))
+    a_imag = np.tensordot(I, sin_phi, axes=([-1],[0]))
+
+    # Wrapped phase [-π, π)
+    phase = np.arctan2(-a_imag, a_real)   # negative imag for conventional orientation
+
+    # Modulation and mean intensity
+    A = np.sqrt(a_real**2 + a_imag**2) * (2.0 / N)
+    Iavg = np.mean(I, axis=-1)
     mod = np.clip(A / (Iavg + 1e-6), 0, 1)
+
     return phase, mod
+
 
 def _show_and_grab_sequence(surface, cam, patterns, wait_s, avg_per=1, sleep_after=0.0,camtype = "rotpy"):
     """
@@ -261,7 +285,7 @@ def _show_and_grab_sequence(surface, cam, patterns, wait_s, avg_per=1, sleep_aft
 def capture_sine_sets(proj_w, proj_h,
                       exposure_ms=10.0, gain_db=0.0,
                       proj_monitor_mode="index", proj_monitor_index=1,
-                      periods_x=64, periods_y=48, nphase=4,
+                      periods_x=5000, periods_y=5000, nphase=4,
                       wait_s=None, avg_per=1, gamma=None,camtype = "rotpy"):
     """
     Projects 4-step sine sets for X and Y, captures frames, and returns:
@@ -337,7 +361,7 @@ def capture_and_decode_sine_hybrid(proj_w, proj_h,
     # 1) gray
     px_i, py_i, black_cap, white_cap, valid_gray = capture_and_decode(
         proj_w, proj_h, exposure_ms, gain_db,
-        proj_monitor_mode, proj_monitor_index, wait_s
+        proj_monitor_mode, proj_monitor_index, wait_s,camtype=camtype,
     )
 
     # 2) sine sets
@@ -350,8 +374,8 @@ def capture_and_decode_sine_hybrid(proj_w, proj_h,
     black_cap = black_cap2; white_cap = white_cap2
 
     # decode 4-step phases
-    phase_x, mod_x = decode_phase_4step(frames_x)
-    phase_y, mod_y = decode_phase_4step(frames_y)
+    phase_x, mod_x = decode_phase_nstep(frames_x)
+    phase_y, mod_y = decode_phase_nstep(frames_y)
 
     # 3) hybrid unwrap
     px_f = unwrap_with_gray(phase_x, px_i)
