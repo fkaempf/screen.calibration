@@ -5,6 +5,18 @@ import numpy as np
 import cv2
 import pygame
 
+CAMTYPE = "alvium"        # "rotpy" or "alvium"
+MODE = "sine_hybrid"           # "gray" or "sine_hybrid"
+PERIODS_X = 64          # ~12.5px period for 800px width
+PERIODS_Y = 48          # ~12.5px period for 600px height
+NPHASE    = 4
+AVG_PER   = 1           # you can increase to 3–5 if needed
+GAMMA_INV = None        # set 2.2 if you want inverse-gamma on the projected sines
+PROJ_W = 1280
+PROJ_H = 800
+
+
+
 # ------------- load projector->camera maps -------------
 mapx = np.load("mapx.npy").astype(np.float32)
 mapy = np.load("mapy.npy").astype(np.float32)
