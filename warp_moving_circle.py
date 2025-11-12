@@ -45,7 +45,7 @@ def _to_surface(img_u8, size_wh):
 
 # ---------- camera helpers ----------
 def _get_rotpy_cam():
-    for mod in ("gray_capture_rotpy_basic", "gray_capture_rotpy"):
+    for mod in ("screen_calibration.capture.gray_capture_rotpy", "gray_capture_rotpy_basic", "gray_capture_rotpy"):
         try:
             return __import__(mod, fromlist=["CamRotPy"]).CamRotPy
         except Exception:

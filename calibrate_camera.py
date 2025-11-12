@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 from pathlib import Path
 
-from detect_pose import detect_pose
+from screen_calibration.calibration.detect_pose import detect_pose
 
 # ------------------------------
 # Read existing ChArUco

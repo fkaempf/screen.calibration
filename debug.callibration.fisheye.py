@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 from pathlib import Path
 import matplotlib.pyplot as plt
-from detect_pose import detect_pose
+from screen_calibration.calibration.detect_pose import detect_pose
 charuco_img = cv2.imread("ChArUco_Marker.png")
 
 

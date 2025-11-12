@@ -82,7 +82,7 @@ def _img_to_surface(img_u8, size_wh):
 # ---------- camera capture ----------
 def capture_one_camera_frame(save_path, exposure_ms=EXPOSURE, gain_db=GAIN_DB, settle_s=0.0, camtype=CAMTYPE):
     if camtype.lower() == "alvium":
-        from CamAlvium import CamAlvium
+from screen_calibration.camera.CamAlvium import CamAlvium
         cam = CamAlvium(exposure_ms=exposure_ms, gain_db=gain_db)
         cam.start(); 
         if settle_s > 0: time.sleep(settle_s)
@@ -92,7 +92,7 @@ def capture_one_camera_frame(save_path, exposure_ms=EXPOSURE, gain_db=GAIN_DB, s
         cam.stop()
     else:
         RotCam = None
-        for mod in ("gray_capture_rotpy_basic", "gray_capture_rotpy"):
+        for mod in ("screen_calibration.capture.gray_capture_rotpy", "gray_capture_rotpy_basic", "gray_capture_rotpy"):
             try:
                 RotCam = __import__(mod, fromlist=["CamRotPy"]).CamRotPy
                 break

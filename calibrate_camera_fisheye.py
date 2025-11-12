@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 from pathlib import Path
 import matplotlib.pyplot as plt
-from detect_pose import detect_pose  # kept if you still want your custom overlay
+from screen_calibration.calibration.detect_pose import detect_pose  # kept if you still want your custom overlay
 
 # ------------------------------
 # Read existing ChArUco

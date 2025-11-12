@@ -105,8 +105,8 @@ def capture_one_camera_frame(save_path, exposure_ms=16.7, gain_db=0.0, settle_s=
     """
     RotCam = None
     cam = None
-    # try both common module names
-    for mod in ("gray_capture_rotpy_basic", "gray_capture_rotpy"):
+    # prefer packaged path, fall back to old names
+    for mod in ("screen_calibration.capture.gray_capture_rotpy", "gray_capture_rotpy_basic", "gray_capture_rotpy"):
         try:
             RotCam = __import__(mod, fromlist=["CamRotPy"]).CamRotPy
             break

@@ -1,4 +1,4 @@
-from CamAlvium import CamAlvium
+from screen_calibration.camera.CamAlvium import CamAlvium
 import os
 import cv2
 import numpy as np
