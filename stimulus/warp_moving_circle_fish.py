@@ -1,5 +1,7 @@
 # warp_circle_oscillate_and_record_omni_alvium.py
 # Projector-sized maps (projector <- camera). Camera = Alvium + omnidir (Mei) with K, D, xi.
+import sys
+sys.path.append(r"D:\screen.calibration")
 
 import os, time, math
 import sys
@@ -7,7 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 import numpy as np
 import cv2
 import pygame
-from CamAlvium import CamAlvium  # must be available in PYTHONPATH
+from cameras.CamAlvium import CamAlvium  # must be available in PYTHONPATH
 
 # ---------- CONFIG ----------
 PROJ_W, PROJ_H = 1280, 800
@@ -15,8 +17,8 @@ EXPOSURE_MS    = 7.0
 GAIN_DB        = 0.0
 OSC_FREQ_HZ    = 0.25
 SAVE_UNDISTORT = True
-OMNI_CFG_DIR   = "fisheye_config"
-OUTDIR         = "debug/moving.circle.fish.alvium"
+OMNI_CFG_DIR   = "D:\screen.calibration/configs/fisheye.config"
+OUTDIR         = "D:\screen.calibration/debug/moving.circle.fish.alvium"
 ZOOM_UNDISTORT = 0.1
 
 # === Circle control parameters ===
@@ -46,9 +48,9 @@ my = np.clip(np.where(valid, mapy, -1.0), 0, cam_h - 1).astype(np.float32)
 
 # ---------- LOAD OMNIDIR INTRINSICS ----------
 def load_omni(cfg_dir):
-    K  = np.load(os.path.join(cfg_dir, "K.npy")).astype(np.float64).reshape(3,3)
-    D  = np.load(os.path.join(cfg_dir, "D.npy")).astype(np.float64).reshape(1,4)
-    xi = np.load(os.path.join(cfg_dir, "xi.npy")).astype(np.float64).ravel()
+    K  = np.load(os.path.join(cfg_dir, "fisheye.K.npy")).astype(np.float64).reshape(3,3)
+    D  = np.load(os.path.join(cfg_dir, "fisheye.D.npy")).astype(np.float64).reshape(1,4)
+    xi = np.load(os.path.join(cfg_dir, "fisheye.xi.npy")).astype(np.float64).ravel()
     xi = np.array([float(xi[0])], dtype=np.float64)
     return K, D, xi
 
