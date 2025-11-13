@@ -192,9 +192,11 @@ if __name__ == "__main__":
         mapx, mapy = mx, my
         
     mapx, mapy = despeckle_maps(mapx, mapy, valid_mask=valid, k_med=3, k_avg=5, tol=2.0)
-        
+    
+    
     # (optional) tiny final median to knock single-pixel residue
     mapx = cv2.medianBlur(mapx, 3); mapy = cv2.medianBlur(mapy, 3)
+
 
     # save projector side heat maps
     save_heat(os.path.join(OUT, "mapx_heat.png"), mapx, cam_w - 1)
@@ -223,9 +225,9 @@ if __name__ == "__main__":
 
     # 6) uv_map: compute, save, visualize, render a VR checker, project, capture
     if CAMTYPE.lower() == "rotpy":
-        K_path, D_path = "K_cam.npy", "D_cam.npy"
+        K_path, D_path = "D:/screen.calibration/configs/pinhole.config/pinhole.K.npy", "D:/screen.calibration/configs/pinhole.config/pinhole.D.npy"
     elif CAMTYPE.lower() == "alvium":
-        K_path, D_path, xi_path = "fisheye_config/K.npy", "fisheye_config/D.npy","fisheye_config/xi.npy"
+        K_path, D_path, xi_path = "D:/screen.calibration/configs/fisheye.config/fisheye.K.npy", "D:/screen.calibration/configs/fisheye.config/fisheye.D.npy","D:/screen.calibration/configs/fisheye.config/fisheye.xi.npy"
         if not (os.path.exists(K_path) and os.path.exists(D_path) and os.path.exists(xi_path)):
             raise FileNotFoundError("omnidir intrinsics missing: K/D/xi")
         
