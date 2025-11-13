@@ -19,8 +19,8 @@ OUTDIR = "out"
 os.makedirs(OUTDIR, exist_ok=True)
 
 # ---------- load projector<-camera maps (DEST=projector; VALUES=camera coords) ----------
-mapx = np.load("mapx.npy").astype(np.float32)
-mapy = np.load("mapy.npy").astype(np.float32)
+mapx = np.load("D:/screen.calibration/configs/camera.projector.mapping/mapx.npy").astype(np.float32)
+mapy = np.load("D:/screen.calibration/configs/camera.projector.mapping/mapy.npy").astype(np.float32)
 assert mapx.shape == (PROJ_H, PROJ_W) and mapy.shape == (PROJ_H, PROJ_W), "map size must equal projector size"
 
 # ---------- infer required camera frame size from map ranges ----------
