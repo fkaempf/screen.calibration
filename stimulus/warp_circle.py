@@ -18,8 +18,8 @@ PROJ_H = 800
 
 
 # ------------- load projector->camera maps -------------
-mapx = np.load("mapx.npy").astype(np.float32)
-mapy = np.load("mapy.npy").astype(np.float32)
+mapx = np.load("D:/screen.calibration/configs/camera.projector.mapping/mapx.npy").astype(np.float32)
+mapy = np.load("D:/screen.calibration/configs/camera.projector.mapping/mapy.npy").astype(np.float32)
 proj_h, proj_w = mapx.shape  # expect 600, 800
 
 # ------------- infer camera image size -------------
