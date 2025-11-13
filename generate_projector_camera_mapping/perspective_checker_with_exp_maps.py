@@ -9,7 +9,7 @@ import pygame
 sys.path.append(r"D:\screen.calibration")
 
 from cameras.CamAlvium import CamAlvium
-from mapping_utils import (
+from generate_projector_camera_mapping.mapping_utils import (
     capture_and_decode_sine_hybrid,
     capture_and_decode,
     CamRotPy,
@@ -20,7 +20,7 @@ from stimulus.warp_stimulus import (
     make_uv_map,
 )
 
-from mapping_pipeline import save_heat01, make_equirect_checker, project_and_capture_single
+from generate_projector_camera_mapping.mapping_pipeline import save_heat01, make_equirect_checker, project_and_capture_single
 
 
 
