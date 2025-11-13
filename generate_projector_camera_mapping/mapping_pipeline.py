@@ -6,7 +6,7 @@ import sys
 sys.path.append(r"D:\screen.calibration")
 from cameras.CamAlvium import CamAlvium
 from cameras.CamRotPy import CamRotPy
-from mapping_utils import capture_and_decode_sine_hybrid, capture_and_decode
+from generate_projector_camera_mapping.mapping_utils import capture_and_decode_sine_hybrid, capture_and_decode
 from stimulus.warp_stimulus import build_proj_to_cam_map, make_camera_grid, make_uv_map
 
 

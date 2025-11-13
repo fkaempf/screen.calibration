@@ -6,9 +6,9 @@ import pygame
 import sys
 sys.path.append(r"D:\screen.calibration")
 from cameras.CamAlvium import CamAlvium
-from mapping_utils import capture_and_decode_sine_hybrid, capture_and_decode, CamRotPy
+from generate_projector_camera_mapping.mapping_utils import capture_and_decode_sine_hybrid, capture_and_decode, CamRotPy
 from stimulus.warp_stimulus import build_proj_to_cam_map, make_camera_grid, make_uv_map
-from mapping_pipeline import _pick_monitor_rightmost, _frame_to_surface
+from generate_projector_camera_mapping.mapping_pipeline import _pick_monitor_rightmost, _frame_to_surface
 
 
 
