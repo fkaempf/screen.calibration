@@ -226,7 +226,7 @@ for it in per_file_sorted:
 )
 
 
-name = 'calibration.pictures/1800 U 501m NIR-07XC0/automatic.chessboard/61.png'
+name = 'calibration.pictures/1800 U 501m NIR-07XC0/automatic.chessboard/0061.png'
 img = cv2.imread(name, cv2.IMREAD_COLOR)
 h, w = img.shape[:2]
 
@@ -359,10 +359,10 @@ make_video_alt("debug/rectified.map")
 
 # --- persist raw calibration (already computed as 'best') ---
 os.makedirs("configs/fisheye.config", exist_ok=True)
-np.save("configs/fisheye.config/K.npy",  best["K"])
-np.save("configs/fisheye.config/D.npy",  best["D"])
-np.save("configs/fisheye.config/xi.npy", best["xi"].ravel())  # (1,)
-with open("configs/fisheye.config/meta.json","w") as f:
+np.save("configs/fisheye.config/fisheye.K.npy",  best["K"])
+np.save("configs/fisheye.config/fisheye.D.npy",  best["D"])
+np.save("configs/fisheye.config/fisheye.xi.npy", best["xi"].ravel())  # (1,)
+with open("configs/fisheye.config/fisheye.meta.json","w") as f:
     json.dump({
         "model":"omnidir-mei",
         "shape": list(best["shape"]),
