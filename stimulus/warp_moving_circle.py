@@ -5,8 +5,8 @@ import cv2
 import pygame
 
 # ---------- load projector->camera maps ----------
-mapx = np.load("mapx.npy").astype(np.float32)
-mapy = np.load("mapy.npy").astype(np.float32)
+mapx = np.load("D:/screen.calibration/configs/camera.projector.mapping/mapx.npy").astype(np.float32)
+mapy = np.load("D:/screen.calibration/configs/camera.projector.mapping/mapy.npy").astype(np.float32)
 proj_h, proj_w = mapx.shape  # e.g. 600, 800
 
 # ---------- infer camera image size ----------
