@@ -1,5 +1,6 @@
 # warp_circle_oscillate_and_record_omni_alvium.py
 # Projector-sized maps (projector <- camera). Camera = Alvium + omnidir (Mei) with K, D, xi.
+
 import sys
 sys.path.append(r"D:\screen.calibration")
 
@@ -20,29 +21,36 @@ SAVE_UNDISTORT = True
 OMNI_CFG_DIR   = "D:\screen.calibration/configs/fisheye.config"
 OUTDIR         = "D:\screen.calibration/debug/moving.circle.fish.alvium"
 ZOOM_UNDISTORT = 0.1
+TIMEOUT_STIM   = 20.0           # <-- now actively enforced
+USE_EXPERIMENTAL_MAP = True
 
-# === Circle control parameters ===
-DOT_RADIUS_FRAC = 0.05       # fraction of min(cam_w, cam_h)
-DOT_Y_FRAC      = 0.65   # vertical placement as fraction of height (1=top, 0=bottom)
-OSC_AMPL_FRAC   = 0.8       # horizontal motion amplitude fraction (0=no motion, 1=max full width)
+DOT_RADIUS_FRAC = 0.05
+DOT_Y_FRAC      = 0.65
+OSC_AMPL_FRAC   = 0.8
 
-# === Paths ===
 RAW_PATH       = os.path.join(OUTDIR, "osc_circle_alvium_raw.mp4")
 UND_PATH       = os.path.join(OUTDIR, "osc_circle_alvium_undist.mp4")
 LAST_PROJ_PNG  = os.path.join(OUTDIR, "osc_circle_last_projector_frame.png")
 os.makedirs(OUTDIR, exist_ok=True)
 
 # ---------- LOAD MAPS ----------
-mapx = np.load("mapx.npy").astype(np.float32)
-mapy = np.load("mapy.npy").astype(np.float32)
+if USE_EXPERIMENTAL_MAP:
+    mapx = np.load('D:/screen.calibration/configs/camera.projector.mapping/mapx.experimental.npy').astype(np.float32)
+    mapy = np.load('D:/screen.calibration/configs/camera.projector.mapping/mapy.experimental.npy').astype(np.float32)
+else:
+    mapx = np.load('D:/screen.calibration/configs/camera.projector.mapping/mapx.npy').astype(np.float32)
+    mapy = np.load('D:/screen.calibration/configs/camera.projector.mapping/mapy.npy').astype(np.float32)
+
 assert mapx.shape == (PROJ_H, PROJ_W)
 assert mapy.shape == (PROJ_H, PROJ_W)
 
 valid = np.isfinite(mapx) & np.isfinite(mapy) & (mapx >= 0) & (mapy >= 0)
 if not np.any(valid):
     raise RuntimeError("mapx/mapy contain no valid entries")
+
 cam_w = int(np.ceil(mapx[valid].max())) + 1
 cam_h = int(np.ceil(mapy[valid].max())) + 1
+
 mx = np.clip(np.where(valid, mapx, -1.0), 0, cam_w - 1).astype(np.float32)
 my = np.clip(np.where(valid, mapy, -1.0), 0, cam_h - 1).astype(np.float32)
 
@@ -51,8 +59,7 @@ def load_omni(cfg_dir):
     K  = np.load(os.path.join(cfg_dir, "fisheye.K.npy")).astype(np.float64).reshape(3,3)
     D  = np.load(os.path.join(cfg_dir, "fisheye.D.npy")).astype(np.float64).reshape(1,4)
     xi = np.load(os.path.join(cfg_dir, "fisheye.xi.npy")).astype(np.float64).ravel()
-    xi = np.array([float(xi[0])], dtype=np.float64)
-    return K, D, xi
+    return K, D, np.array([float(xi[0])], dtype=np.float64)
 
 K_omni, D_omni, xi_omni = load_omni(OMNI_CFG_DIR)
 
@@ -64,16 +71,16 @@ def undistort_omnidir_frame(gray_u8, K, D, xi, zoom=0.3):
     Knew[0,2] = w / 2.0
     Knew[1,2] = h / 2.0
     return cv2.omnidir.undistortImage(
-    gray_u8, 
-    K = K, 
-    xi = xi,
-    D = D, 
-    flags  = 1, 
-    Knew = Knew, 
-    new_size  = (w, h)
-)
+        gray_u8, 
+        K=K, 
+        xi=xi,
+        D=D,
+        flags=1,
+        Knew=Knew,
+        new_size=(w, h)
+    )
 
-# ---------- PYGAME FULLSCREEN PROJECTOR ----------
+# ---------- PYGAME PROJECTOR ----------
 try:
     from screeninfo import get_monitors
 except Exception:
@@ -101,20 +108,21 @@ def to_surface(img_u8, size_wh):
 
 m = pick_rightmost_monitor()
 os.environ["SDL_VIDEODRIVER"] = "windows"
-os.environ["SDL_AUDIODRIVER"] = "dummy"
+os.environ["SDL_AUDIODRIVER"]  = "dummy"
 os.environ["SDL_HINT_VIDEO_HIGHDPI_DISABLED"] = "1"
 os.environ["SDL_VIDEO_WINDOW_POS"] = f"{m.x},{m.y}"
+
 pygame.display.init()
-flags = pygame.FULLSCREEN | pygame.SCALED
-screen = pygame.display.set_mode((m.width, m.height), flags)
+screen = pygame.display.set_mode((m.width, m.height), pygame.FULLSCREEN | pygame.SCALED)
 pygame.display.set_caption("Projector")
 
 # ---------- ALVIUM CAMERA ----------
 cam = CamAlvium(exposure_ms=EXPOSURE_MS, gain_db=GAIN_DB)
 cam.start()
 try: cam.grab(timeout_s=0.5)
-except Exception: pass
+except: pass
 
+# Estimate FPS
 samples = []
 prev = time.perf_counter()
 for _ in range(100):
@@ -142,56 +150,77 @@ x0       = cam_w / 2.0
 cam_img = np.zeros((cam_h, cam_w, 3), np.uint8)
 last_proj = None
 
-# ---------- MAIN LOOP ----------
+# ---------- MAIN LOOP WITH TIMEOUT ----------
 loop_start = time.perf_counter()
+deadline   = loop_start + TIMEOUT_STIM     # <-- timeout enforced
 frames_written = 0
 paused = False
 
 try:
-    while True:
+    while time.perf_counter() < deadline:   # <-- timeout-aware loop
         for e in pygame.event.get():
-            if e.type == pygame.QUIT: raise KeyboardInterrupt
+            if e.type == pygame.QUIT:
+                raise KeyboardInterrupt
             if e.type == pygame.KEYDOWN:
-                if e.key in (pygame.K_ESCAPE, pygame.K_q): raise KeyboardInterrupt
-                if e.key in (pygame.K_SPACE, pygame.K_p): paused = not paused
+                if e.key in (pygame.K_ESCAPE, pygame.K_q):
+                    raise KeyboardInterrupt
+                if e.key in (pygame.K_SPACE, pygame.K_p):
+                    paused = not paused
 
         if not paused:
             t = time.perf_counter() - loop_start
             x_center = int(round(x0 + A * math.sin(2 * math.pi * OSC_FREQ_HZ * t)))
 
             cam_img.fill(0)
-            cv2.circle(cam_img, (x_center, y_center), radius, (255, 255, 255), -1, lineType=cv2.LINE_8)
+            cv2.circle(cam_img, (x_center, y_center), radius, (255,255,255), -1)
 
-            proj_frame = cv2.remap(cam_img, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0))
+            proj_frame = cv2.remap(
+                cam_img, mx, my,
+                cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_CONSTANT,
+                borderValue=(0,0,0)
+            )
             last_proj = proj_frame
 
             surf = to_surface(proj_frame, (m.width, m.height))
-            screen.blit(surf, (0, 0)); pygame.display.flip()
+            screen.blit(surf, (0, 0))
+            pygame.display.flip()
 
         frame = cam.grab()
-        if frame.dtype != np.uint8: frame = cv2.convertScaleAbs(frame)
+        if frame.dtype != np.uint8:
+            frame = cv2.convertScaleAbs(frame)
+
         raw_writer.write(cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR))
+
         if SAVE_UNDISTORT:
             und = undistort_omnidir_frame(frame, K_omni, D_omni, xi_omni, zoom=ZOOM_UNDISTORT)
             und_writer.write(cv2.cvtColor(und, cv2.COLOR_GRAY2BGR))
+
         frames_written += 1
+
+    print("Timeout reached — stopping stimulus.")   # <-- timeout message
 
 except KeyboardInterrupt:
     pass
+
 finally:
     loop_end = time.perf_counter()
     loop_fps = frames_written / max(1e-6, (loop_end - loop_start))
     print(f"Loop FPS ~ {loop_fps:.3f}")
+
     if last_proj is not None:
         cv2.imwrite(LAST_PROJ_PNG, last_proj)
+
     raw_writer.release()
     if SAVE_UNDISTORT and und_writer is not None:
         und_writer.release()
+
     cam.stop()
-    pygame.display.quit(); pygame.quit()
+    pygame.display.quit()
+    pygame.quit()
 
 print("Saved:")
 print(f" - {RAW_PATH}")
-if SAVE_UNDISTORT: print(f" - {UND_PATH}")
+if SAVE_UNDISTORT:
+    print(f" - {UND_PATH}")
 print(f" - {LAST_PROJ_PNG}")
-
