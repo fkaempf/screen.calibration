@@ -89,11 +89,13 @@ def build_gain_map(mapx, mapy, white_cap_u8, eps=1e-3):
 
 def make_camera_grid(h, w, step=40, thick=1):
     img = np.full((h, w), 255, np.uint8)
+
     for y in range(0, h, step):
         cv2.line(img, (0, y), (w-1, y), 0, thick)
+
     for x in range(0, w, step):
         cv2.line(img, (x, 0), (x, h-1), 0, thick)
-    cv2.drawMarker(img, (w//2, h//2), 0, cv2.MARKER_CROSS, step, max(1, thick))
+
     return img
 
 import numpy as np
