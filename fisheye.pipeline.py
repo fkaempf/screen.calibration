@@ -57,12 +57,12 @@ GAMMA_INV  = None           # set 2.2 to apply inverse gamma to sines
 # )
 
 # --- sparse refinement of mapx/mapy ---
-STEP    = 7       # projector grid spacing in px
+STEP    = 40       # projector grid spacing in px
 DOT_R   = 5        # radius of projected dot (currently unused)
 EXP_MS  = 3.0
 GAIN_DB = 0.0
 SETTLE  = 0.01    # seconds to wait after updating projector
-SIZE    = 10
+SIZE    = 40
 
 refine_mapx_mapy(
     STEP=STEP,
@@ -72,6 +72,7 @@ refine_mapx_mapy(
     SETTLE=SETTLE,
     SIZE=SIZE,
     CAMTYPE=CAMTYPE,
+    BUFFER_PX = 40
 )
 
 # --- perspective checker with experimental maps ---

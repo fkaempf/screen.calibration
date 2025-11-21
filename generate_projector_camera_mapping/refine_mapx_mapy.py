@@ -19,6 +19,23 @@ from generate_projector_camera_mapping.mapping_pipeline import (
 )
 
 
+def _expand_mask_with_buffer(mask: np.ndarray, buffer_px: int) -> np.ndarray:
+    """
+    Dilate a boolean mask by buffer_px pixels in all directions.
+    mask: bool array [H, W]
+    buffer_px: non-negative integer
+    returns: bool array [H, W]
+    """
+    if buffer_px <= 0:
+        return mask
+
+    # kernel size = (2*buffer_px + 1) so the radius is ~buffer_px
+    ksize = 2 * buffer_px + 1
+    kernel = np.ones((ksize, ksize), np.uint8)
+    dilated = cv2.dilate(mask.astype(np.uint8), kernel)
+    return dilated.astype(bool)
+
+
 def refine_mapx_mapy(
     STEP,
     DOT_R,   # currently unused, kept for completeness
@@ -27,8 +44,8 @@ def refine_mapx_mapy(
     SETTLE,
     SIZE,
     CAMTYPE,
+    BUFFER_PX,  # new: buffer in projector pixels around vis_map
 ):
-# %%
     mapx = np.load(
         "D:/screen.calibration/configs/camera.projector.mapping/mapx.npy"
     ).astype(np.float32)
@@ -110,9 +127,7 @@ def refine_mapx_mapy(
 
                 # if there is *no* overlap between bright dot and valid mask → skip
                 if combined.any():
-                    
                     vis_map[y : y + SIZE, x : x + SIZE] += 1
-         
 
     except KeyboardInterrupt:
         pass
@@ -121,9 +136,15 @@ def refine_mapx_mapy(
         pygame.display.quit()
         pygame.quit()
 
+    # original vis_map: where we actually probed
     vis_map = vis_map != 0
-    mapx[~vis_map] = np.nan
-    mapy[~vis_map] = np.nan
+
+    # expand vis_map with a buffer (projector pixels)
+    vis_map_buffered = _expand_mask_with_buffer(vis_map, BUFFER_PX)
+
+    # apply to maps
+    mapx[~vis_map_buffered] = np.nan
+    mapy[~vis_map_buffered] = np.nan
 
     np.save(
         "D:/screen.calibration/configs/camera.projector.mapping/mapx.experimental.npy",
@@ -133,9 +154,10 @@ def refine_mapx_mapy(
         "D:/screen.calibration/configs/camera.projector.mapping/mapy.experimental.npy",
         mapy,
     )
+
     mx = mapx.astype(np.float32)
     my = mapy.astype(np.float32)
-    vm = vis_map.astype(np.float32)
+    vm = vis_map_buffered.astype(np.float32)
 
     mx = np.nan_to_num(mx, nan=0.0)
     my = np.nan_to_num(my, nan=0.0)
@@ -151,24 +173,20 @@ def refine_mapx_mapy(
 
     cv2.imshow("mapx", mx_show)
     cv2.imshow("mapy", my_show)
-    cv2.imshow("vis_map", vm_show)
+    cv2.imshow("vis_map (buffered)", vm_show)
     cv2.waitKey(4000)
     cv2.destroyAllWindows()
 
 
-
-
-
-
-
 if __name__ == "__main__":
     STEP = 50       # projector grid spacing in px
-    DOT_R = 5      # radius of projected dot (currently unused)
+    DOT_R = 5       # radius of projected dot (currently unused)
     EXP_MS = 3.0
     GAIN_DB = 0.0
-    SETTLE = 0.05  # seconds to wait after updating projector
+    SETTLE = 0.05   # seconds to wait after updating projector
     SIZE = 50
     CAMTYPE = "alvium"
+    BUFFER_PX = 40  # buffer in projector pixels around the measured vis_map area
 
     refine_mapx_mapy(
         STEP=STEP,
@@ -178,4 +196,5 @@ if __name__ == "__main__":
         SETTLE=SETTLE,
         SIZE=SIZE,
         CAMTYPE=CAMTYPE,
+        BUFFER_PX=BUFFER_PX,
     )
