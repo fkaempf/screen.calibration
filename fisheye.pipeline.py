@@ -44,25 +44,25 @@ NPHASE     = 15
 AVG_PER    = 5              # increase to 3–5 if needed
 GAMMA_INV  = None           # set 2.2 to apply inverse gamma to sines
 
-# execute_mapping(
-#     CAMTYPE=CAMTYPE,
-#     PROJ_W=PROJ_W,
-#     PROJ_H=PROJ_H,
-#     MODE=MODE,
-#     PERIODS_X=PERIODS_X,
-#     PERIODS_Y=PERIODS_Y,
-#     NPHASE=NPHASE,
-#     AVG_PER=AVG_PER,
-#     GAMMA_INV=GAMMA_INV,
-# )
+execute_mapping(
+    CAMTYPE=CAMTYPE,
+    PROJ_W=PROJ_W,
+    PROJ_H=PROJ_H,
+    MODE=MODE,
+    PERIODS_X=PERIODS_X,
+    PERIODS_Y=PERIODS_Y,
+    NPHASE=NPHASE,
+    AVG_PER=AVG_PER,
+    GAMMA_INV=GAMMA_INV,
+)
 
 # --- sparse refinement of mapx/mapy ---
-STEP    = 40       # projector grid spacing in px
+STEP    = 7       # projector grid spacing in px
 DOT_R   = 5        # radius of projected dot (currently unused)
 EXP_MS  = 3.0
 GAIN_DB = 0.0
 SETTLE  = 0.01    # seconds to wait after updating projector
-SIZE    = 40
+SIZE    = 10
 
 refine_mapx_mapy(
     STEP=STEP,
@@ -72,7 +72,7 @@ refine_mapx_mapy(
     SETTLE=SETTLE,
     SIZE=SIZE,
     CAMTYPE=CAMTYPE,
-    BUFFER_PX = 40
+    BUFFER_PX = 10
 )
 
 # --- perspective checker with experimental maps ---
